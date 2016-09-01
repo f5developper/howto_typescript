@@ -1,0 +1,105 @@
+・gulpでプロジェクトを作成する
+$ mkdir proj
+$ cd proj
+
+・以下のディレクトリ構成を取る
+proj/
+  +- src/ 　//コンパイル前のソースがある場所（tsやbrowserifyする前のもの）
+  +- dist/ //実動作ソース
+
+・エントリポイントを作成
+ package.jsonが作成され、どこをエントリポイントにするかを設定する。
+ 今回は「.dist/main.js」
+ $npm init 
+
+・gulp-cli、typescriptグローバル環境にインストール
+$ npm install -g typescript gulp-cli
+
+・gulpとgulp-typescriptをローカルにインストール
+$ npm install -save-dev gulp gulp-typescript
+
+
+・tsconfig.json作成
+　typescriptをコンパイルするためには「tsconfig.json」が必要
+　プロジェクトルート・ディレクトリ直下に配置。
+{
+    "files": [
+        "src/main.ts"
+    ],
+    "compilerOptions": {
+        "noImplicitAny": true,
+        "target": "es5"
+    }
+}
+
+・gulpfile.jsを作成
+　gulpはタスクランナーなので、一括で動作させたいタスクを登録していく。
+　どのタスクを実行するかを記載するファイルをプロジェクトルート・ディレクトリ直下に
+　「gulpfile.js」を作成して記述する。
+　今回はtypescriptのビルドを行うので、その設定を記述する。
+
+=======gulpfile.jsの内容=======
+var gulp = require("gulp");
+var ts = require("gulp-typescript");
+var tsProject = ts.createProject("tsconfig.json");
+
+//タスク名、処理、[処理、処理、処理]の順に設定する
+//defaultと書くとgulp実行時に引数なしでこのタスクが実行される
+gulp.task("default", function () {
+    return tsProject.src()
+        .pipe(ts(tsProject))
+        .js.pipe(gulp.dest("dist"));
+});
+
+・gulpの実行
+ プロジェクトルート・ディレクトリ直下で以下のコマンドを実行
+ $ gulp
+ 実行するとdistディレクトリ配下にsrcで作成したtsファイルがjsに変換されて配置されている。
+
+・Browserifyのインストール
+　nodeはECMAScript6に準拠している為、問題ないがブラウザで動作するjsの場合は
+　ブラウザECMAScript6に対応していないものが多い。
+　なので、ECMAScript5の記述に変換してやる必要がある。
+　その為のプラグインがbrowserify。tsifyはbrowserifyのtypescript用のプラグイン
+
+・browserify tsify vinyl-source-streamをローカルにインストール
+$ npm install -save-dev browserify tsify vinyl-source-stream
+
+・gulpfile.jsを作成
+　今まではtypescriptのビルドだけだったけど、
+　以下のタスクを追加する
+　・「src/*.html」を「dist」配下に移動する
+　・browserifyを使用して、typescriptのビルド行う。
+　　typescriptのファイルはビルドすると「bundle.js」でまとめられる。
+　　その後、distディレクトリ配下に「bundle.js」を配置
+
+=======gulpfile.jsの内容=======
+var gulp = require("gulp");
+var browserify = require("browserify");
+var source = require('vinyl-source-stream');
+var tsify = require("tsify");
+var paths = {
+    pages: ['src/*.html']
+};
+
+//copy-htmlという名前のタスクを登録する
+gulp.task("copy-html", function () {
+    return gulp.src(paths.pages)
+        .pipe(gulp.dest("dist"));
+});
+
+//デフォルトのタスク（gulpを引数無しで実行）はcopy-htmlの後に
+//browserifyを行う
+gulp.task("default", ["copy-html"], function () {
+    return browserify({
+        basedir: '.',
+        debug: true,
+        entries: ['src/main.ts'],
+        cache: {},
+        packageCache: {}
+    })
+    .plugin(tsify)
+    .bundle()
+    .pipe(source('bundle.js'))
+    .pipe(gulp.dest("dist"));
+});
